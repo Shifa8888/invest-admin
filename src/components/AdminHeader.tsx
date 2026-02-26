@@ -31,8 +31,7 @@ export function AdminHeader({ onToggleSidebar, title = "Dashboard" }: AdminHeade
         </button>
         <h1 className="text-lg font-semibold text-foreground">{title}</h1>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="hidden md:flex items-center gap-2 bg-secondary rounded-lg px-3 py-2">
+<div className="flex items-center gap-3 w-full justify-end">        <div className="hidden md:flex items-center gap-2 bg-secondary rounded-lg px-3 py-2">
           <Search className="w-4 h-4 text-muted-foreground" />
           <input
             type="text"
@@ -52,9 +51,9 @@ export function AdminHeader({ onToggleSidebar, title = "Dashboard" }: AdminHeade
           onClick={handleLogout}
           className="text-muted-foreground hover:text-foreground hover:bg-secondary"
           title="Logout"
-        >
-          <LogOut className="w-5 h-5" />
-        </Button>
+        ><span className="hidden sm:inline">Logout</span> 
+<LogOut className="w-5 h-5" />
+                 </Button>
       </div>
     </header>
   );
