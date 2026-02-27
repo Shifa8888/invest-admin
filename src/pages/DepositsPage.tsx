@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { CheckCircle, XCircle, Clock, Eye } from "lucide-react";
+import { CheckCircle, XCircle, Eye, Plus, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 
 interface Deposit {
@@ -33,27 +34,75 @@ export default function DepositsPage() {
   const [rejectDialog, setRejectDialog] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
 
+  // ─── Add Deposit Modal States ───────────────────────────────
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [amount, setAmount] = useState("");
+  const [network, setNetwork] = useState<"TRC20" | "BEP20" | "">("");
+
+  // Fake wallet addresses & QR codes (in real app → from backend / env)
+  const wallets = {
+    TRC20: "TAbc123def456ghi789jklmnoPQRstuvwxyz12",
+    BEP20: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+  };
+
+  const qrImages = {
+    TRC20: "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=TAbc123def456ghi789jklmnoPQRstuvwxyz12",
+    BEP20: "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+  };
+
   const handleApprove = (id: string) => {
-    setDeposits(prev => prev.map(d => d.id === id ? { ...d, status: "Approved" as const } : d));
+    setDeposits((prev) => prev.map((d) => (d.id === id ? { ...d, status: "Approved" } : d)));
     setSelectedDeposit(null);
-    toast({ title: "Approved", description: `Deposit ${id} approved successfully` });
+    toast({ title: "Approved", description: `Deposit ${id} approved` });
   };
 
   const handleReject = (id: string) => {
-    setDeposits(prev => prev.map(d => d.id === id ? { ...d, status: "Rejected" as const } : d));
+    setDeposits((prev) => prev.map((d) => (d.id === id ? { ...d, status: "Rejected" } : d)));
     setRejectDialog(null);
     setRejectNote("");
     setSelectedDeposit(null);
-    toast({ title: "Rejected", description: `Deposit ${id} has been rejected` });
+    toast({ title: "Rejected", description: `Deposit ${id} rejected` });
+  };
+
+  const handleCreateDeposit = () => {
+    if (!amount || !network || Number(amount) <= 0) return;
+
+    const newId = `DEP${String(deposits.length + 1001).slice(-3)}`;
+    const now = new Date().toLocaleString("sv-SE", { timeZone: "UTC" }).replace(" ", " ");
+
+    const newDeposit: Deposit = {
+      id: newId,
+      user: "Current User", // ← in real app: from auth context
+      amount: Number(amount),
+      method: network,
+      txId: "pending-tx-" + Date.now().toString(36),
+      status: "Pending",
+      date: now,
+    };
+
+    setDeposits((prev) => [newDeposit, ...prev]);
+    toast({
+      title: "Deposit Request Created",
+      description: `$${amount} via ${network} – awaiting confirmation`,
+    });
+
+    // Reset & close
+    setAddModalOpen(false);
+    setTimeout(() => {
+      setStep(1);
+      setAmount("");
+      setNetwork("");
+    }, 300);
   };
 
   const counts = {
-    pending: deposits.filter(d => d.status === "Pending").length,
-    approved: deposits.filter(d => d.status === "Approved").length,
-    rejected: deposits.filter(d => d.status === "Rejected").length,
-    pendingAmount: deposits.filter(d => d.status === "Pending").reduce((s, d) => s + d.amount, 0),
-    approvedAmount: deposits.filter(d => d.status === "Approved").reduce((s, d) => s + d.amount, 0),
-    rejectedAmount: deposits.filter(d => d.status === "Rejected").reduce((s, d) => s + d.amount, 0),
+    pending: deposits.filter((d) => d.status === "Pending").length,
+    approved: deposits.filter((d) => d.status === "Approved").length,
+    rejected: deposits.filter((d) => d.status === "Rejected").length,
+    pendingAmount: deposits.filter((d) => d.status === "Pending").reduce((s, d) => s + d.amount, 0),
+    approvedAmount: deposits.filter((d) => d.status === "Approved").reduce((s, d) => s + d.amount, 0),
+    rejectedAmount: deposits.filter((d) => d.status === "Rejected").reduce((s, d) => s + d.amount, 0),
   };
 
   const renderTable = (data: Deposit[]) => (
@@ -61,36 +110,49 @@ export default function DepositsPage() {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-muted-foreground border-b border-border bg-secondary/30">
-            <th className="text-left py-3 px-3 md:px-4 font-medium">ID</th>
-            <th className="text-left py-3 px-3 md:px-4 font-medium">User</th>
-            <th className="text-left py-3 px-3 md:px-4 font-medium">Amount</th>
-            <th className="text-left py-3 px-3 md:px-4 font-medium hidden md:table-cell">Method</th>
-            <th className="text-left py-3 px-3 md:px-4 font-medium hidden lg:table-cell">Tx ID</th>
-            <th className="text-left py-3 px-3 md:px-4 font-medium">Status</th>
-            <th className="text-left py-3 px-3 md:px-4 font-medium">Actions</th>
+            <th className="text-left py-3 px-4 font-medium">ID</th>
+            <th className="text-left py-3 px-4 font-medium">User</th>
+            <th className="text-left py-3 px-4 font-medium">Amount</th>
+            <th className="text-left py-3 px-4 font-medium hidden md:table-cell">Method</th>
+            <th className="text-left py-3 px-4 font-medium hidden lg:table-cell">Tx ID</th>
+            <th className="text-left py-3 px-4 font-medium">Status</th>
+            <th className="text-left py-3 px-4 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {data.map(dep => (
-            <tr key={dep.id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-              <td className="py-3 px-3 md:px-4 font-mono text-xs text-muted-foreground">{dep.id}</td>
-              <td className="py-3 px-3 md:px-4 text-foreground">{dep.user}</td>
-              <td className="py-3 px-3 md:px-4 text-foreground font-medium">${dep.amount.toLocaleString()}</td>
-              <td className="py-3 px-3 md:px-4 text-muted-foreground hidden md:table-cell">{dep.method}</td>
-              <td className="py-3 px-3 md:px-4 font-mono text-xs text-muted-foreground hidden lg:table-cell">{dep.txId}</td>
-              <td className="py-3 px-3 md:px-4">
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  dep.status === "Approved" ? "bg-success/10 text-success" :
-                  dep.status === "Pending" ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
-                }`}>{dep.status}</span>
+          {data.map((dep) => (
+            <tr key={dep.id} className="border-b border-border/50 hover:bg-secondary/20">
+              <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{dep.id}</td>
+              <td className="py-3 px-4">{dep.user}</td>
+              <td className="py-3 px-4 font-medium">${dep.amount.toLocaleString()}</td>
+              <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{dep.method}</td>
+              <td className="py-3 px-4 font-mono text-xs text-muted-foreground hidden lg:table-cell">{dep.txId}</td>
+              <td className="py-3 px-4">
+                <span
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                    dep.status === "Approved"
+                      ? "bg-green-500/10 text-green-600"
+                      : dep.status === "Pending"
+                      ? "bg-amber-500/10 text-amber-600"
+                      : "bg-red-500/10 text-red-600"
+                  }`}
+                >
+                  {dep.status}
+                </span>
               </td>
-              <td className="py-3 px-3 md:px-4">
-                <div className="flex gap-1">
-                  <button onClick={() => setSelectedDeposit(dep)} className="p-1.5 hover:bg-secondary rounded"><Eye className="w-4 h-4 text-muted-foreground" /></button>
+              <td className="py-3 px-4">
+                <div className="flex gap-1.5">
+                  <button onClick={() => setSelectedDeposit(dep)} className="p-1.5 hover:bg-secondary rounded">
+                    <Eye className="w-4 h-4 text-muted-foreground" />
+                  </button>
                   {dep.status === "Pending" && (
                     <>
-                      <button onClick={() => handleApprove(dep.id)} className="p-1.5 hover:bg-success/20 rounded"><CheckCircle className="w-4 h-4 text-success" /></button>
-                      <button onClick={() => setRejectDialog(dep.id)} className="p-1.5 hover:bg-destructive/20 rounded"><XCircle className="w-4 h-4 text-destructive" /></button>
+                      <button onClick={() => handleApprove(dep.id)} className="p-1.5 hover:bg-green-500/10 rounded">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      </button>
+                      <button onClick={() => setRejectDialog(dep.id)} className="p-1.5 hover:bg-red-500/10 rounded">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                      </button>
                     </>
                   )}
                 </div>
@@ -98,7 +160,11 @@ export default function DepositsPage() {
             </tr>
           ))}
           {data.length === 0 && (
-            <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">No deposits found</td></tr>
+            <tr>
+              <td colSpan={7} className="text-center py-10 text-muted-foreground">
+                No deposits found
+              </td>
+            </tr>
           )}
         </tbody>
       </table>
@@ -106,65 +172,185 @@ export default function DepositsPage() {
   );
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <div>
-        <h2 className="text-lg md:text-xl font-bold text-foreground">Deposit Management</h2>
-        <p className="text-xs md:text-sm text-muted-foreground">Review and manage all deposits</p>
+    <div className="space-y-6">
+      {/* Header + Add Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold">Deposit Management</h2>
+          <p className="text-sm text-muted-foreground">Review and process all deposits</p>
+        </div>
+        <Button onClick={() => setAddModalOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Deposit
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "Pending", count: counts.pending, amount: `$${counts.pendingAmount.toLocaleString()}`, color: "text-warning" },
-          { label: "Approved", count: counts.approved, amount: `$${counts.approvedAmount.toLocaleString()}`, color: "text-success" },
-          { label: "Rejected", count: counts.rejected, amount: `$${counts.rejectedAmount.toLocaleString()}`, color: "text-destructive" },
-        ].map(s => (
-          <div key={s.label} className="glass-card p-3 md:p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs md:text-sm text-muted-foreground">{s.label}</p>
-              <p className={`text-xl md:text-2xl font-bold ${s.color}`}>{s.count}</p>
-            </div>
-            <p className="text-base md:text-lg font-semibold text-foreground">{s.amount}</p>
+          { label: "Pending", count: counts.pending, amount: counts.pendingAmount, color: "text-amber-600" },
+          { label: "Approved", count: counts.approved, amount: counts.approvedAmount, color: "text-green-600" },
+          { label: "Rejected", count: counts.rejected, amount: counts.rejectedAmount, color: "text-red-600" },
+        ].map((s) => (
+          <div key={s.label} className="border rounded-lg p-4 bg-card">
+            <p className="text-sm text-muted-foreground">{s.label}</p>
+            <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
+            <p className="text-lg font-semibold mt-1">${s.amount.toLocaleString()}</p>
           </div>
         ))}
       </div>
 
+      {/* Tabs + Table */}
       <Tabs defaultValue="all" className="w-full">
-        <TabsList className="bg-secondary border border-border w-full sm:w-auto flex">
-          <TabsTrigger value="all" className="flex-1 sm:flex-initial">All</TabsTrigger>
-          <TabsTrigger value="pending" className="flex-1 sm:flex-initial">Pending</TabsTrigger>
-          <TabsTrigger value="approved" className="flex-1 sm:flex-initial">Approved</TabsTrigger>
-          <TabsTrigger value="rejected" className="flex-1 sm:flex-initial">Rejected</TabsTrigger>
+        <TabsList className="mb-4">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="pending">Pending</TabsTrigger>
+          <TabsTrigger value="approved">Approved</TabsTrigger>
+          <TabsTrigger value="rejected">Rejected</TabsTrigger>
         </TabsList>
-        <TabsContent value="all"><div className="glass-card overflow-hidden">{renderTable(deposits)}</div></TabsContent>
-        <TabsContent value="pending"><div className="glass-card overflow-hidden">{renderTable(deposits.filter(d => d.status === "Pending"))}</div></TabsContent>
-        <TabsContent value="approved"><div className="glass-card overflow-hidden">{renderTable(deposits.filter(d => d.status === "Approved"))}</div></TabsContent>
-        <TabsContent value="rejected"><div className="glass-card overflow-hidden">{renderTable(deposits.filter(d => d.status === "Rejected"))}</div></TabsContent>
+
+        <TabsContent value="all">{renderTable(deposits)}</TabsContent>
+        <TabsContent value="pending">{renderTable(deposits.filter((d) => d.status === "Pending"))}</TabsContent>
+        <TabsContent value="approved">{renderTable(deposits.filter((d) => d.status === "Approved"))}</TabsContent>
+        <TabsContent value="rejected">{renderTable(deposits.filter((d) => d.status === "Rejected"))}</TabsContent>
       </Tabs>
 
-      {/* Detail */}
+      {/* ─── Add Deposit Modal ──────────────────────────────────────── */}
+      <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{step === 1 ? "New Deposit" : `Deposit via ${network}`}</DialogTitle>
+          </DialogHeader>
+
+          {step === 1 && (
+            <div className="space-y-5 py-4">
+              <div className="space-y-2">
+                <Label>Amount (USDT)</Label>
+                <Input
+                  type="number"
+                  placeholder="50.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  min="1"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Network</Label>
+                <Select value={network} onValueChange={(v: "TRC20" | "BEP20") => setNetwork(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select network" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TRC20">TRON (TRC-20) - USDT</SelectItem>
+                    <SelectItem value="BEP20">BSC (BEP-20) - USDT</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={() => setAddModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={!network || !amount || Number(amount) <= 0}
+                  onClick={() => setStep(2)}
+                >
+                  Continue
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {step === 2 && network && (
+            <div className="space-y-6 py-4">
+              <div className="flex flex-col items-center gap-4">
+                <div className="border rounded-lg p-3 bg-white">
+                  <img
+                    src={qrImages[network]}
+                    alt="QR Code"
+                    width={180}
+                    height={180}
+                    className="rounded"
+                  />
+                </div>
+
+                <div className="w-full space-y-1.5">
+                  <Label className="text-sm">Wallet Address ({network})</Label>
+                  <div className="flex items-center gap-2 font-mono text-sm bg-muted p-3 rounded border break-all">
+                    {wallets[network]}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(wallets[network]);
+                        toast({ title: "Copied!" });
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-center text-muted-foreground">
+                  Send USDT ({network}) only to this address
+                  <br />
+                  Amount ≈ ${Number(amount).toLocaleString()}
+                </p>
+              </div>
+
+              <DialogFooter className="gap-3">
+                <Button variant="outline" onClick={() => setStep(1)}>
+                  Back
+                </Button>
+                <Button onClick={handleCreateDeposit}>Deposit Update</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Existing Detail Dialog */}
       <Dialog open={!!selectedDeposit} onOpenChange={() => setSelectedDeposit(null)}>
-        <DialogContent className="bg-card border-border max-w-[95vw] sm:max-w-md">
-          <DialogHeader><DialogTitle className="text-foreground">Deposit Details</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Deposit Details</DialogTitle>
+          </DialogHeader>
           {selectedDeposit && (
-            <div className="space-y-3">
+            <div className="space-y-3 pt-2">
               {[
-                { label: "Deposit ID", value: selectedDeposit.id },
+                { label: "ID", value: selectedDeposit.id },
                 { label: "User", value: selectedDeposit.user },
                 { label: "Amount", value: `$${selectedDeposit.amount.toLocaleString()}` },
                 { label: "Method", value: selectedDeposit.method },
-                { label: "Transaction ID", value: selectedDeposit.txId },
+                { label: "Tx ID", value: selectedDeposit.txId },
                 { label: "Date", value: selectedDeposit.date },
                 { label: "Status", value: selectedDeposit.status },
-              ].map(item => (
-                <div key={item.label} className="flex justify-between py-2 border-b border-border/50">
-                  <span className="text-sm text-muted-foreground">{item.label}</span>
-                  <span className="text-sm font-medium text-foreground">{item.value}</span>
+              ].map((item) => (
+                <div key={item.label} className="flex justify-between py-1.5 border-b">
+                  <span className="text-muted-foreground">{item.label}</span>
+                  <span className="font-medium">{item.value}</span>
                 </div>
               ))}
+
               {selectedDeposit.status === "Pending" && (
-                <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                  <Button className="flex-1 gap-2" onClick={() => handleApprove(selectedDeposit.id)}><CheckCircle className="w-4 h-4" /> Approve</Button>
-                  <Button variant="destructive" className="flex-1 gap-2" onClick={() => { setSelectedDeposit(null); setRejectDialog(selectedDeposit.id); }}><XCircle className="w-4 h-4" /> Reject</Button>
+                <div className="flex gap-3 pt-4">
+                  <Button className="flex-1" onClick={() => handleApprove(selectedDeposit.id)}>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Approve
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => {
+                      setSelectedDeposit(null);
+                      setRejectDialog(selectedDeposit.id);
+                    }}
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Reject
+                  </Button>
                 </div>
               )}
             </div>
@@ -172,14 +358,28 @@ export default function DepositsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Reject with note */}
-      <Dialog open={rejectDialog !== null} onOpenChange={() => { setRejectDialog(null); setRejectNote(""); }}>
-        <DialogContent className="bg-card border-border max-w-[95vw] sm:max-w-sm">
-          <DialogHeader><DialogTitle className="text-foreground">Reject Deposit</DialogTitle></DialogHeader>
-          <div><Label>Rejection Note (optional)</Label><Textarea placeholder="Reason for rejection..." value={rejectNote} onChange={e => setRejectNote(e.target.value)} className="mt-1" /></div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => { setRejectDialog(null); setRejectNote(""); }} className="w-full sm:w-auto">Cancel</Button>
-            <Button variant="destructive" onClick={() => rejectDialog && handleReject(rejectDialog)} className="w-full sm:w-auto">Reject</Button>
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialog !== null} onOpenChange={() => setRejectDialog(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reject Deposit</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Reason (optional)</Label>
+            <Textarea
+              className="mt-1.5"
+              placeholder="Enter reason..."
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialog(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => rejectDialog && handleReject(rejectDialog)}>
+              Reject
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
